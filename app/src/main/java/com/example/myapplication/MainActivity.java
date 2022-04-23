@@ -86,6 +86,14 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
             return;
         }
 
+        try {
+            session.resume();
+        } catch (CameraNotAvailableException e) {
+            System.out.println("Camera not available. Try restarting the app.");
+            session = null;
+            return;
+        }
+
         lastTapMotionEvent = null;
         placementIsDone = false;
     }
@@ -146,6 +154,7 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
         super.onResume();
         try {
             session.resume();
+            surfaceView.onResume();
         } catch (CameraNotAvailableException e) {
             System.out.println("Camera not available. Try restarting the app.");
             session = null;
@@ -157,9 +166,70 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
     protected void onPause() {
         super.onPause();
         if (session != null) {
+            surfaceView.onPause();
             session.pause();
         }
     }
+
+
+    private void disableInstantPlacement() {
+        config.setInstantPlacementMode(Config.InstantPlacementMode.DISABLED);
+    }
+
+    @Override
+    public void onDrawFrame(GL10 gl) {
+        if (session == null) {
+            return;
+        }
+
+        Frame frame;
+        try {
+            frame = session.update();
+        } catch (Exception e) {
+            System.out.println("---------------------------------------ERROR in session update: " + e.getMessage());
+            this.finishAffinity();
+            return;
+        }
+
+        // Place an object on tap.
+        if (!placementIsDone && (lastTapMotionEvent != null)) {
+            // Use estimated distance from the user's device to the real world, based
+            // on expected user interaction and behavior.
+            float approximateDistanceMeters = 2.0f;
+            // Performs a ray cast given a screen tap position.
+            List<HitResult> results =
+                    frame.hitTestInstantPlacement(lastTapMotionEvent.getX(), lastTapMotionEvent.getY(),
+                            approximateDistanceMeters);
+            if (!results.isEmpty()) {
+                System.out.println("RESULTS NOT EMPTY!");
+                InstantPlacementPoint point = (InstantPlacementPoint) results.get(0).getTrackable();
+                // Create an Anchor from the point's pose.
+                Anchor anchor = point.createAnchor(point.getPose());
+                placementIsDone = true;
+                disableInstantPlacement();
+            }
+            else {
+                System.out.println("RESULTS EMPTY!");
+            }
+            lastTapMotionEvent = null;
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+//        if (!CameraPermissionHelper.hasCameraPermission(this)) {
+//            // Use toast instead of snackbar here since the activity will exit.
+//            Toast.makeText(this, "Camera permission is needed to run this application", Toast.LENGTH_LONG)
+//                    .show();
+//            if (!CameraPermissionHelper.shouldShowRequestPermissionRationale(this)) {
+//                // Permission denied with checking "Do not ask again".
+//                CameraPermissionHelper.launchPermissionSettings(this);
+//            }
+//            finish();
+//        }
+    }
+}
 
 //    @Override
 //    public void onDrawFrame(GL10 gl) {
@@ -203,60 +273,3 @@ public class MainActivity extends AppCompatActivity implements GLSurfaceView.Ren
 //            }
 //        }
 //    }
-
-
-    private void disableInstantPlacement() {
-        config.setInstantPlacementMode(Config.InstantPlacementMode.DISABLED);
-    }
-
-    @Override
-    public void onDrawFrame(GL10 gl) {
-        if (session == null) {
-            return;
-        }
-
-        Frame frame;
-        try {
-            System.out.println("---------------------------------------Starting session update");
-            frame = session.update();
-        } catch (Exception e) {
-            System.out.println("---------------------------------------ERROR in session update: " + e.getMessage());
-            this.finishAffinity();
-            return;
-        }
-
-        // Place an object on tap.
-        if (!placementIsDone && (lastTapMotionEvent != null)) {
-            lastTapMotionEvent = null;
-            // Use estimated distance from the user's device to the real world, based
-            // on expected user interaction and behavior.
-            float approximateDistanceMeters = 2.0f;
-            // Performs a ray cast given a screen tap position.
-            List<HitResult> results =
-                    frame.hitTestInstantPlacement(lastTapMotionEvent.getX(), lastTapMotionEvent.getY(),
-                            approximateDistanceMeters);
-            if (!results.isEmpty()) {
-                InstantPlacementPoint point = (InstantPlacementPoint) results.get(0).getTrackable();
-                // Create an Anchor from the point's pose.
-                Anchor anchor = point.createAnchor(point.getPose());
-                placementIsDone = true;
-                disableInstantPlacement();
-            }
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
-        super.onRequestPermissionsResult(requestCode, permissions, results);
-//        if (!CameraPermissionHelper.hasCameraPermission(this)) {
-//            // Use toast instead of snackbar here since the activity will exit.
-//            Toast.makeText(this, "Camera permission is needed to run this application", Toast.LENGTH_LONG)
-//                    .show();
-//            if (!CameraPermissionHelper.shouldShowRequestPermissionRationale(this)) {
-//                // Permission denied with checking "Do not ask again".
-//                CameraPermissionHelper.launchPermissionSettings(this);
-//            }
-//            finish();
-//        }
-    }
-}
